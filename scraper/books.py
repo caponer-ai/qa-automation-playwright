@@ -58,10 +58,10 @@ def parse_page(page: Page) -> list[Book]:
 def scrape(page: Page, max_pages: int, start_url: str = START_URL) -> list[Book]:
     books: list[Book] = []
     page.goto(start_url)
-    for _ in range(max_pages):
+    for page_no in range(1, max_pages + 1):
         books.extend(parse_page(page))
         next_link = page.locator("li.next a")
-        if not next_link.count():
+        if page_no == max_pages or not next_link.count():
             break
         page.goto(urljoin(page.url, _attr(next_link, "href")))
     return books

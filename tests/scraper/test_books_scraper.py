@@ -1,41 +1,48 @@
+import json
+
 import pytest
 
-from scraper.books import save, scrape
+from scraper.books import START_URL, Book, save, scrape
+from settings import BOOKS_URL
 
 pytestmark = pytest.mark.scraper
 
-
-@pytest.fixture(scope="module")
-def books(browser):
-    page = browser.new_page()
-    page.route("**/*.{png,jpg,jpeg,gif,woff,woff2}", lambda route: route.abort())
-    result = scrape(page, max_pages=2)
-    page.close()
-    return result
+LAST_PAGE = f"{BOOKS_URL}/catalogue/page-50.html"
 
 
-def test_scrapes_twenty_books_per_page(books):
+@pytest.fixture
+def books(offline_page) -> list[Book]:
+    return scrape(offline_page, max_pages=2)
+
+
+def test_follows_pagination(books):
     assert len(books) == 40
 
 
-def test_fields_are_parsed(books):
+def test_first_book_parsed_exactly(books):
+    assert books[0] == Book(
+        title="A Light in the Attic",
+        price=51.77,
+        rating=3,
+        in_stock=True,
+        url=f"{BOOKS_URL}/catalogue/a-light-in-the-attic_1000/index.html",
+    )
+
+
+def test_every_book_is_valid(books):
     for book in books:
         assert book.title
         assert book.price > 0
         assert 1 <= book.rating <= 5
-        assert book.url.startswith("https://books.toscrape.com/catalogue/")
+        assert book.url.startswith(f"{BOOKS_URL}/catalogue/")
 
 
-def test_titles_are_unique(books):
+def test_no_duplicates_across_pages(books):
     assert len({b.url for b in books}) == len(books)
 
 
-def test_stops_on_last_page(browser):
-    page = browser.new_page()
-    result = scrape(page, max_pages=5, start_url="https://books.toscrape.com/catalogue/page-50.html")
-    page.close()
-
-    assert len(result) == 20
+def test_stops_on_last_page(offline_page):
+    assert len(scrape(offline_page, max_pages=5, start_url=LAST_PAGE)) == 20
 
 
 def test_save_csv_and_json(books, tmp_path):
@@ -45,4 +52,15 @@ def test_save_csv_and_json(books, tmp_path):
     save(books, str(json_path))
 
     assert len(csv_path.read_text(encoding="utf-8").splitlines()) == len(books) + 1
-    assert json_path.read_text(encoding="utf-8").count('"title"') == len(books)
+    assert json.loads(json_path.read_text(encoding="utf-8"))[0]["title"] == books[0].title
+
+
+@pytest.mark.live
+def test_live_site_still_matches_parser(page):
+    """Smoke check against the real site: fails if the markup changes and the HAR needs re-recording."""
+    page.route("**/*.{png,jpg,jpeg,gif,woff,woff2}", lambda route: route.abort())
+
+    books = scrape(page, max_pages=1, start_url=START_URL)
+
+    assert len(books) == 20
+    assert all(b.price > 0 and b.title for b in books)
