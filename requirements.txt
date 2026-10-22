@@ -1,0 +1,5 @@
+playwright==1.64.0
+pytest==8.4.2
+pytest-playwright==0.7.1
+pytest-xdist==3.8.0
+pytest-rerunfailures==16.1
