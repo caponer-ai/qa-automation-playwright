@@ -90,6 +90,8 @@ def test_product_link_opens_same_product(login_as, user):
     inventory = login_as(user)
     inventory.open_product("Sauce Labs Backpack")
 
+    # wait for navigation first: the catalogue has six elements with the same test id
+    expect(inventory.page).to_have_url(re.compile(r"inventory-item\.html\?id=\d+"))
     expect(ProductPage(inventory.page).name).to_have_text("Sauce Labs Backpack")
 
 
