@@ -1,8 +1,10 @@
+import csv
 import json
+from dataclasses import asdict
 
 import pytest
 
-from scraper.books import START_URL, Book, save, scrape
+from scraper.books import START_URL, Book, ParseError, parse_page, save, scrape
 from settings import BOOKS_URL
 
 pytestmark = pytest.mark.scraper
@@ -10,9 +12,22 @@ pytestmark = pytest.mark.scraper
 LAST_PAGE = f"{BOOKS_URL}/catalogue/page-50.html"
 
 
+def card(rating_class: str = "star-rating Three", title: str = "A Book", price: str = "£12.50") -> str:
+    return f"""
+    <article class="product_pod">
+      <p class="{rating_class}"></p>
+      <h3><a href="a-book_1/index.html" title="{title}">A Book</a></h3>
+      <p class="price_color">{price}</p>
+      <p class="instock availability">In stock</p>
+    </article>"""
+
+
 @pytest.fixture
 def books(offline_page) -> list[Book]:
     return scrape(offline_page, max_pages=2)
+
+
+# --- recorded pages ------------------------------------------------------
 
 
 def test_follows_pagination(books):
@@ -45,14 +60,74 @@ def test_stops_on_last_page(offline_page):
     assert len(scrape(offline_page, max_pages=5, start_url=LAST_PAGE)) == 20
 
 
-def test_save_csv_and_json(books, tmp_path):
-    csv_path, json_path = tmp_path / "books.csv", tmp_path / "books.json"
+def test_rejects_non_positive_page_limit(offline_page):
+    with pytest.raises(ValueError, match="at least 1"):
+        scrape(offline_page, max_pages=0)
 
-    save(books, str(csv_path))
-    save(books, str(json_path))
 
-    assert len(csv_path.read_text(encoding="utf-8").splitlines()) == len(books) + 1
-    assert json.loads(json_path.read_text(encoding="utf-8"))[0]["title"] == books[0].title
+# --- markup edge cases, no network --------------------------------------
+
+
+def test_rating_does_not_depend_on_class_order(page):
+    page.set_content(card(rating_class="Four star-rating"))
+
+    assert parse_page(page)[0].rating == 4
+
+
+def test_unknown_rating_is_a_parse_error(page):
+    page.set_content(card(rating_class="star-rating Six"))
+
+    with pytest.raises(ParseError):
+        parse_page(page)
+
+
+def test_price_without_currency_symbol(page):
+    page.set_content(card(price="12.50"))
+
+    assert parse_page(page)[0].price == 12.5
+
+
+# --- export --------------------------------------------------------------
+
+
+def test_csv_round_trips_every_field(books, tmp_path):
+    path = tmp_path / "books.csv"
+
+    save(books, str(path))
+
+    with path.open(encoding="utf-8", newline="") as f:
+        rows = list(csv.DictReader(f))
+    assert rows == [{k: str(v) for k, v in asdict(b).items()} for b in books]
+
+
+def test_csv_keeps_commas_quotes_and_newlines(tmp_path):
+    tricky = Book(title='Say "hi", then\nleave', price=1.0, rating=1, in_stock=False, url="u")
+    path = tmp_path / "books.csv"
+
+    save([tricky], str(path))
+
+    with path.open(encoding="utf-8", newline="") as f:
+        assert next(csv.DictReader(f))["title"] == tricky.title
+
+
+def test_json_round_trips(books, tmp_path):
+    path = tmp_path / "books.json"
+
+    save(books, str(path))
+
+    assert [Book(**row) for row in json.loads(path.read_text(encoding="utf-8"))] == books
+
+
+@pytest.mark.parametrize("ext", ["csv", "json"])
+def test_empty_result_still_writes_a_file(tmp_path, ext):
+    path = tmp_path / f"books.{ext}"
+
+    save([], str(path))
+
+    assert path.exists()
+
+
+# --- live site -----------------------------------------------------------
 
 
 @pytest.mark.live

@@ -6,12 +6,16 @@ Usage: python -m scraper.books --pages 3 --out books.csv
 import argparse
 import csv
 import json
-from dataclasses import asdict, dataclass
+import re
+from dataclasses import asdict, dataclass, fields
 from urllib.parse import urljoin
 
 from playwright.sync_api import Locator, Page, sync_playwright
 
-START_URL = "https://books.toscrape.com/catalogue/page-1.html"
+from settings import BOOKS_URL
+
+START_URL = f"{BOOKS_URL}/catalogue/page-1.html"
+_PRICE = re.compile(r"\d+(?:\.\d+)?")
 RATINGS = {"One": 1, "Two": 2, "Three": 3, "Four": 4, "Five": 5}
 # images and fonts are not needed for parsing, skipping them speeds pages up
 SKIPPED_ASSETS = "**/*.{png,jpg,jpeg,gif,woff,woff2}"
@@ -39,13 +43,18 @@ def _attr(locator: Locator, name: str) -> str:
 
 def parse_card(card: Locator, page_url: str) -> Book:
     link = card.locator("h3 a")
-    rating_word = _attr(card.locator("p.star-rating"), "class").split()[-1]
-    if rating_word not in RATINGS:
-        raise ParseError(f"unknown rating {rating_word!r}")
+    # rating is one of the classes, e.g. "star-rating Three"; order of classes is not relied on
+    rating_words = set(_attr(card.locator("p.star-rating"), "class").split()) & RATINGS.keys()
+    if len(rating_words) != 1:
+        raise ParseError(f"no single rating class in {card.locator('p.star-rating')}")
+    price_text = card.locator("p.price_color").inner_text()
+    price = _PRICE.search(price_text)
+    if price is None:
+        raise ParseError(f"no price in {price_text!r}")
     return Book(
         title=_attr(link, "title"),
-        price=float(card.locator("p.price_color").inner_text().lstrip("£Â")),
-        rating=RATINGS[rating_word],
+        price=float(price.group()),
+        rating=RATINGS[rating_words.pop()],
         in_stock="In stock" in card.locator("p.availability").inner_text(),
         url=urljoin(page_url, _attr(link, "href")),
     )
@@ -56,6 +65,8 @@ def parse_page(page: Page) -> list[Book]:
 
 
 def scrape(page: Page, max_pages: int, start_url: str = START_URL) -> list[Book]:
+    if max_pages < 1:
+        raise ValueError("max_pages must be at least 1")
     books: list[Book] = []
     page.goto(start_url)
     for page_no in range(1, max_pages + 1):
@@ -74,7 +85,7 @@ def save(books: list[Book], path: str) -> None:
             json.dump(rows, f, ensure_ascii=False, indent=2)
         return
     with open(path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=list(rows[0]))
+        writer = csv.DictWriter(f, fieldnames=[field.name for field in fields(Book)])
         writer.writeheader()
         writer.writerows(rows)
 
