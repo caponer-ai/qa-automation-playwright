@@ -36,7 +36,7 @@ positive and negative tests.
 
 ## 5. Known defects: one registry, strict xfail limited to `AssertionError`
 
-**Why:** the same journeys run for all six accounts. Confirmed bugs are listed once in
+**Why:** the same journeys run for the five accounts that can log in (`locked_out_user` is covered by the login tests). Confirmed bugs are listed once in
 `tests/ui/known_defects.py`; the matching tests are expected to fail. `strict=True` turns a fixed bug into a
 red test, so the registry cannot go stale. `raises=AssertionError` keeps timeouts and crashes red, so an
 infrastructure problem is never mistaken for a known bug.

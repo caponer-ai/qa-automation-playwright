@@ -77,8 +77,7 @@ def test_every_item_can_be_added_and_removed(login_as, user):
     ]
     for slug in slugs:
         inventory.add_to_cart(slug)
-    broken_add = [s for s in slugs if not inventory.remove_button(s).is_visible()]
-    assert not broken_add, f"could not add: {broken_add}"
+        expect(inventory.remove_button(slug), f"could not add {slug}").to_be_visible()
 
     for slug in slugs:
         inventory.remove_from_cart(slug)

@@ -10,4 +10,4 @@ repos:
     hooks:
       - id: mypy
         additional_dependencies: [playwright==1.64.0]
-        files: ^(pages|clients|scraper)/
+        files: ^(pages/|clients/|scraper/|settings\.py)
