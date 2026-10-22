@@ -10,4 +10,4 @@ repos:
     hooks:
       - id: mypy
         additional_dependencies: [playwright==1.64.0]
-        files: ^(pages/|clients/|scraper/|settings\.py)
+        pass_filenames: false # file list comes from [tool.mypy] in pyproject.toml

@@ -24,7 +24,7 @@ jobs:
       - run: pip install -r requirements-dev.txt
       - run: ruff check .
       - run: ruff format --check .
-      - run: mypy pages scraper clients settings.py
+      - run: mypy
 
   tests:
     needs: lint
@@ -32,7 +32,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: [ui, api, scraper]
+        include:
+          - suite: ui
+            select: "ui and not perf"
+            browser: true
+          - suite: api
+            select: "api"
+            browser: false # API tests use Playwright's HTTP client only
+          - suite: scraper
+            select: "scraper and not live"
+            browser: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -41,12 +50,14 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
       - name: Cache Playwright browsers
+        if: matrix.browser
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ hashFiles('requirements.txt') }}
-      - run: playwright install --with-deps chromium
-      - run: pytest -m ${{ matrix.suite }} -n auto -rxX
+      - if: matrix.browser
+        run: playwright install --with-deps chromium
+      - run: pytest -m "${{ matrix.select }}" -n auto -rxX
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
@@ -54,10 +65,26 @@ jobs:
           path: test-results/
           retention-days: 7
 
+  # Timing on shared runners and drift of third-party markup are signals, not merge gates.
+  signals:
+    needs: lint
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: playwright install --with-deps chromium
+      - run: pytest -m "perf or live" -p no:xdist -rxX
+
   docker:
     needs: lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: docker build -t qa-automation .
-      - run: docker run --rm qa-automation pytest -m "not live" -n auto
+      # offline suite only: proves the image runs the tests without depending on third-party sites
+      - run: docker run --rm qa-automation pytest -m "scraper and not live" -n auto

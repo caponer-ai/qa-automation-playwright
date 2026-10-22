@@ -1,10 +1,13 @@
-# Defects found by the suite
+# Defects detected by the suite
 
-Found by `tests/ui/test_user_matrix.py`: every journey runs for each saucedemo account, `standard_user` is the reference.
-saucedemo ships these accounts with intentional defects; the point here is that the suite catches them on its own.
+saucedemo ships these accounts with intentional, publicly known defects, so this is not a discovery.
+What it shows is the method: run the same journeys for every account, treat `standard_user` as the
+reference, confirm each difference by hand, then register it. The defects were first spotted with an
+exploratory script and are now checked by `tests/ui/test_user_matrix.py`.
 
-Each bug is registered in `tests/ui/known_defects.py` and its test is `xfail(strict=True, raises=AssertionError)`:
-green while the bug exists, red when it gets fixed or when the test fails for a different reason (timeout, crash).
+Each defect is registered in `tests/ui/known_defects.py` against one narrow symptom check
+(`defects.symptom(...)`, see docs/decisions.md, decision 5). The test is xfail while the defect reproduces,
+red when it stops reproducing, and red for any other failure.
 
 Common precondition: open https://www.saucedemo.com, log in with the listed user and password `secret_sauce`.
 
@@ -38,7 +41,7 @@ Common precondition: open https://www.saucedemo.com, log in with the listed user
 **BUG-03** · visual_user
 1. Compare catalog prices with standard_user (Backpack $29.99, Bike Light $9.99, ...).
 - Expected: same prices for every account.
-- Actual: different prices, for example Backpack $61.63. The customer sees a price that is not the one they will pay.
+- Actual: different prices, for example Backpack $61.63. Whether checkout charges the catalog price or the real one was not checked.
 
 **BUG-04** · problem_user, error_user
 1. Choose "Name (Z to A)" or "Price (low to high)" in the sort dropdown.
@@ -75,6 +78,7 @@ Common precondition: open https://www.saucedemo.com, log in with the listed user
 1. On checkout step one type into Last Name.
 - Expected: text appears in the field.
 - Actual: field stays empty, yet Continue accepts the form. Required-field validation is bypassed.
+- Automated: the ignored input (`checkout_form`). That the form is then accepted was confirmed manually.
 
 **BUG-11** · error_user
 1. Complete checkout step one, click "Finish" on the overview.

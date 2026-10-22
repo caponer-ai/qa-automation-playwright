@@ -7,13 +7,14 @@ requires-python = ">=3.12"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
-addopts = "--browser chromium --tracing retain-on-failure --screenshot only-on-failure --output test-results"
+addopts = "--strict-markers --browser chromium --tracing retain-on-failure --screenshot only-on-failure --output test-results"
 xfail_strict = true
 markers = [
     "ui: UI tests on saucedemo.com",
     "api: API tests on restful-booker",
     "scraper: scraper tests on books.toscrape.com",
     "live: hits a live third-party site directly (no recorded responses)",
+    "perf: timing checks, run without parallel workers",
 ]
 
 [tool.ruff]
@@ -26,4 +27,4 @@ select = ["E", "F", "W", "I", "B", "UP", "SIM", "PT", "RUF"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
-exclude = ["^tests/"]
+files = ["pages", "clients", "scraper", "settings.py", "tests/ui/known_defects.py", "tests/scraper/har.py"]

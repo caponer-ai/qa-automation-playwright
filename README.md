@@ -3,40 +3,48 @@
 [![tests](https://github.com/caponer-ai/qa-automation-playwright/actions/workflows/tests.yml/badge.svg)](https://github.com/caponer-ai/qa-automation-playwright/actions/workflows/tests.yml)
 
 UI, API and scraper automation on public practice sites. The UI suite runs the same journeys for every
-saucedemo account and has found **12 defects**, each with repro steps in [BUGS.md](BUGS.md).
-Why things are built this way: [docs/decisions.md](docs/decisions.md).
+saucedemo account and detects the site's 12 intentional defects; each is documented with repro steps in
+[BUGS.md](BUGS.md). Why things are built this way, and what each choice costs: [docs/decisions.md](docs/decisions.md).
 
 | Suite | Target | What is covered |
 |---|---|---|
-| `ui` | [saucedemo.com](https://www.saucedemo.com) | login rules, catalogue, sorting, cart, checkout totals, form validation; a journey × account matrix that finds defects |
+| `ui` | [saucedemo.com](https://www.saucedemo.com) | login rules, catalogue, sorting, cart, checkout items, tax and total, form validation; a journey × account matrix |
 | `api` | [restful-booker](https://restful-booker.herokuapp.com) | booking CRUD through a typed client, token auth, 403 without a token, 404 after delete |
-| `scraper` | [books.toscrape.com](https://books.toscrape.com) | catalogue scraper with pagination, CSV/JSON export, tested offline on a recorded HAR plus one live smoke test |
+| `scraper` | [books.toscrape.com](https://books.toscrape.com) | catalogue scraper with pagination and CSV/JSON export; parser tested offline on a recorded HAR and on edge-case markup, plus one live smoke test |
 
-## How it finds bugs
+## How known defects are handled
 
-`tests/ui/test_user_matrix.py` runs eight journeys for each account that can log in. `standard_user` defines
-correct behaviour. Confirmed defects are registered in one place:
+Every matrix test has preconditions (plain asserts) and one narrow symptom check:
 
 ```python
-# tests/ui/known_defects.py
-(User.PROBLEM, "checkout_form"): "BUG-09 typing Last Name overwrites First Name",
-(User.ERROR, "complete_order"): "BUG-11 Finish does not complete the order",
+def test_remove_from_cart(login_as, user, defects):
+    inventory = login_as(user)
+    slug = SLUGS[BACKPACK]
+    inventory.add_to_cart(slug)
+    expect(inventory.cart_badge).to_have_text("1")  # precondition: red on failure
+
+    inventory.remove_from_cart(slug)
+
+    with defects.symptom("remove_from_cart"):  # only this block can match a known bug
+        expect(inventory.add_button(slug)).to_be_visible()
+        expect(inventory.cart_badge).to_be_hidden()
 ```
 
-Matching tests become `xfail(strict=True, raises=AssertionError)`. The suite stays green while a bug exists,
-turns red when the bug is fixed, and stays red on timeouts or crashes, so an infrastructure problem is
-never counted as a known bug.
+`tests/ui/known_defects.py` maps `(user, symptom)` to a bug id. A registered symptom that fails is xfail;
+one that passes turns red ("no longer reproduces"); anything else that fails is red. These rules have their
+own browser-free tests in `tests/ui/test_known_defects.py`. Decision 5 explains why an earlier, simpler
+approach (`xfail(raises=AssertionError)`) was replaced.
 
 ## Layout
 
 ```
 pages/          Page Objects: locators and actions, no assertions
-clients/        typed API client (Booking dataclasses over APIRequestContext)
+clients/        typed API client: Booking dataclasses, TransientHTTPError for 5xx
 scraper/        books.toscrape.com scraper, also a CLI
 settings.py     target URLs (overridable by env vars) and test accounts
-tests/ui        login, inventory, checkout, user matrix, defect registry
+tests/ui        login, inventory, checkout, user matrix, defect registry and its tests
 tests/api       booking API
-tests/scraper   offline parser tests, HAR fixture and its recorder, live smoke test
+tests/scraper   offline parser tests, edge cases, HAR fixture and its recorder, live smoke test
 docs/           design decisions
 ```
 
@@ -46,10 +54,11 @@ docs/           design decisions
 pip install -r requirements-dev.txt
 playwright install chromium
 
-pytest -n 4                  # everything, 4 workers
-pytest -m ui                 # one suite: ui | api | scraper | live
-pytest -m ui --headed        # watch the browser
-pytest -rxX                  # list known defects in the summary
+pytest -n 4 -m "not perf"        # everything except timing checks, 4 workers
+pytest -m perf -p no:xdist       # timing checks, one process
+pytest -m ui                     # one suite: ui | api | scraper | live | perf
+pytest -m ui --headed            # watch the browser
+pytest -rxX                      # list known defects in the summary
 
 python -m scraper.books --pages 5 --out books.csv
 python -m tests.scraper.record_har     # re-record the HAR after the site changes
@@ -66,12 +75,12 @@ Point the suite at another stand: `SHOP_URL=https://staging.example.com pytest -
 
 ## Speed and stability
 
-- Parallel run with pytest-xdist: 70 tests take about 42 s on 4 workers instead of about 133 s in one process
-  (local Windows machine, 22.10.2026, 3 parallel and 2 sequential runs).
-- Login through the form once per worker, then the session cookie is reused (decision 2).
+- Parallel run with pytest-xdist: the 111 tests outside `perf` take about 70 s on 4 workers instead of about
+  236 s in one process (local Windows machine, 22.10.2026, 3 parallel and 2 sequential runs).
+- Login through the form at most once per account per worker, then the session cookie is reused (decision 2).
 - Web-first `expect()` assertions wait for state; no `sleep` anywhere.
 - Scraper tests replay a HAR with every other request blocked: no network, same input each run (decision 7).
-- Reruns only for transient network errors on the shared API, never for UI tests (decision 6).
+- Reruns only for `TransientHTTPError`, timeouts and connection resets on the shared API, never for UI tests (decision 6).
 
 ## When a test fails
 
@@ -81,6 +90,7 @@ network call and DOM snapshot.
 
 ## CI
 
-GitHub Actions: `ruff` + `ruff format` + strict `mypy` first, then the three suites in parallel, and a job
-that builds the Docker image and runs the suite inside it. A weekly scheduled run catches changes on the
-third-party sites.
+GitHub Actions: `ruff`, `ruff format` and strict `mypy` on library code and the defect registry; then the
+`ui`, `api` and offline `scraper` suites in parallel; a Docker job that builds the image and runs the offline
+suite inside it; and a non-blocking `signals` job for timing checks and the live scraper smoke test
+(decisions 6 and 9). A weekly scheduled run catches changes on the third-party sites.

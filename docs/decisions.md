@@ -15,6 +15,7 @@ Selenium would be the better fit.
 
 **Why:** a UI login in every test adds one page load and one more place to fail. Login behaviour is
 covered by its own tests (`test_login.py`, `test_login_within_budget`); everything else starts logged in.
+With `-n 4` that is at most one form login per account per worker.
 
 **Cost:** relies on saucedemo keeping the session in a cookie. If that changes, `session_cookies` in
 `conftest.py` is the single place to update.
@@ -34,22 +35,35 @@ positive and negative tests.
 
 **Cost:** a few more lines per test than "smart" page methods like `assert_cart_count()`.
 
-## 5. Known defects: one registry, strict xfail limited to `AssertionError`
+## 5. Known defects: a registry plus an explicit symptom block
 
-**Why:** the same journeys run for the five accounts that can log in (`locked_out_user` is covered by the login tests). Confirmed bugs are listed once in
-`tests/ui/known_defects.py`; the matching tests are expected to fail. `strict=True` turns a fixed bug into a
-red test, so the registry cannot go stale. `raises=AssertionError` keeps timeouts and crashes red, so an
-infrastructure problem is never mistaken for a known bug.
+**Why:** the same journeys run for the five accounts that can log in (`locked_out_user` is covered by the
+login tests). Each test has preconditions, written as plain asserts, and one check wrapped in
+`defects.symptom(name)`. Only that block is looked up in `tests/ui/known_defects.py`:
 
-**Cost:** a different assertion failing in an already-xfailed test would be hidden. Mitigation: each
-matrix test checks one behaviour.
+- registered and failing: xfail with the bug id;
+- registered and passing: red, "no longer reproduces", so the registry cannot go stale;
+- not registered, or any failure outside the block (including an `expect()` timeout in a precondition): red.
 
-## 6. Reruns only for transient network errors on the external API
+An earlier version marked whole tests `xfail(raises=AssertionError)`. That was wrong: `expect()` also raises
+`AssertionError` when its wait times out, so a new regression in a precondition was filed under an old bug.
+The rules above are tested without a browser in `tests/ui/test_known_defects.py`.
 
-**Why:** restful-booker is a shared public sandbox and occasionally times out. Reruns are limited to
-timeouts, connection resets and 5xx. UI tests are never rerun: a flaky UI test is a bug in the test.
+**Cost:** one more concept for a reader, and a symptom block must stay narrow. A symptom that spans several
+steps could still hide a second defect inside it; that is why add-to-cart is checked per product and
+remove is a separate test.
 
-**Cost:** a real 5xx regression would be retried twice before failing, adding a few seconds.
+## 6. Reruns only for transient API errors; timing is a signal, not a gate
+
+**Why:** restful-booker is a shared public sandbox. The client raises `TransientHTTPError` for any 5xx, and
+only that, timeouts and connection resets are retried. Wrong answers fail at once. UI tests are never
+rerun: a flaky UI test is a bug in the test.
+
+The login time budget runs in a separate, non-blocking CI job without parallel workers: on shared runners
+CPU contention and network to a third-party site move the number, and a red merge gate without a product
+bug would teach people to ignore red.
+
+**Cost:** a slow-login regression does not block a merge; someone has to look at the signals job.
 
 ## 7. Scraper tests replay a recorded HAR; one live smoke test checks the real site
 
@@ -66,6 +80,13 @@ one page more than asked.
 pytest-xdist processes.
 
 **Cost:** a large scraping job would be faster on the async API with several pages per browser.
+
+## 9. What "offline" and "external" mean here
+
+The UI and API suites test third-party demo sites; there is no application of our own to start locally,
+so they are integration tests by nature and depend on those sites being up. Only the scraper parser
+tests are fully offline. The Docker job runs exactly that offline set, so a third-party outage cannot
+fail the image check.
 
 ## Next steps if this suite grew
 

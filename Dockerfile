@@ -9,4 +9,4 @@ COPY . .
 RUN useradd -m tester && chown -R tester /app
 USER tester
 
-CMD ["pytest", "-n", "auto"]
+CMD ["pytest", "-m", "not perf", "-n", "auto"]
