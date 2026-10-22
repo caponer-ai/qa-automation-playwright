@@ -1,79 +1,89 @@
-"""CRUD tests for the public Restful Booker API using Playwright's APIRequestContext."""
+"""CRUD and auth checks for the public Restful Booker API."""
+
+from dataclasses import replace
 
 import pytest
-from playwright.sync_api import APIRequestContext, Playwright
+from playwright.sync_api import Playwright
 
-pytestmark = [pytest.mark.api, pytest.mark.flaky(reruns=2, reruns_delay=2)]
+from clients.booking import Booking, BookingClient, BookingDates
+from settings import BOOKING_API_URL
 
-API_URL = "https://restful-booker.herokuapp.com"
+# a shared public sandbox: network hiccups are retried, assertion failures are not
+TRANSIENT_ERRORS = ["Timeout", "ECONNRESET", r"-> 5\d\d"]
+pytestmark = [pytest.mark.api, pytest.mark.flaky(reruns=2, reruns_delay=2, only_rerun=TRANSIENT_ERRORS)]
 
-BOOKING = {
-    "firstname": "Test",
-    "lastname": "Automation",
-    "totalprice": 150,
-    "depositpaid": True,
-    "bookingdates": {"checkin": "2026-11-01", "checkout": "2026-11-05"},
-    "additionalneeds": "Breakfast",
-}
+# public demo credentials from the API docs
+ADMIN = ("admin", "password123")
+
+BOOKING = Booking(
+    firstname="Test",
+    lastname="Automation",
+    totalprice=150,
+    depositpaid=True,
+    bookingdates=BookingDates(checkin="2026-11-01", checkout="2026-11-05"),
+    additionalneeds="Breakfast",
+)
 
 
 @pytest.fixture(scope="session")
-def api(playwright: Playwright) -> APIRequestContext:
+def request_context(playwright: Playwright):
     ctx = playwright.request.new_context(
-        base_url=API_URL,
-        extra_http_headers={"Accept": "application/json"},
+        base_url=BOOKING_API_URL, extra_http_headers={"Accept": "application/json"}
     )
     yield ctx
     ctx.dispose()
 
 
-@pytest.fixture(scope="session")
-def token(api) -> str:
-    resp = api.post("/auth", data={"username": "admin", "password": "password123"})
-    assert resp.ok
-    return resp.json()["token"]
+@pytest.fixture
+def anon(request_context) -> BookingClient:
+    return BookingClient(request_context)
 
 
 @pytest.fixture
-def booking_id(api, token) -> int:
-    resp = api.post("/booking", data=BOOKING)
-    assert resp.ok
-    bid = resp.json()["bookingid"]
+def admin(request_context) -> BookingClient:
+    client = BookingClient(request_context)
+    assert client.authenticate(*ADMIN).ok
+    return client
+
+
+@pytest.fixture
+def booking_id(admin):
+    bid = admin.create(BOOKING)
     yield bid
-    api.delete(f"/booking/{bid}", headers={"Cookie": f"token={token}"})
+    admin.delete(bid)
 
 
-def test_create_and_read_booking(api, booking_id):
-    resp = api.get(f"/booking/{booking_id}")
-
-    assert resp.status == 200
-    assert resp.json() == BOOKING
+def test_created_booking_reads_back_unchanged(anon, booking_id):
+    assert anon.fetch(booking_id) == BOOKING
 
 
-def test_update_booking_requires_token(api, booking_id):
-    resp = api.put(f"/booking/{booking_id}", data={**BOOKING, "totalprice": 999})
+def test_update_requires_token(anon, booking_id):
+    resp = anon.update(booking_id, replace(BOOKING, totalprice=999))
 
     assert resp.status == 403
+    assert anon.fetch(booking_id) == BOOKING
 
 
-def test_update_booking(api, token, booking_id):
-    updated = {**BOOKING, "totalprice": 999, "additionalneeds": "Late checkout"}
-    resp = api.put(f"/booking/{booking_id}", data=updated, headers={"Cookie": f"token={token}"})
+def test_update_booking(admin, booking_id):
+    updated = replace(BOOKING, totalprice=999, additionalneeds="Late checkout")
 
-    assert resp.ok
-    assert api.get(f"/booking/{booking_id}").json() == updated
-
-
-def test_delete_booking(api, token):
-    bid = api.post("/booking", data=BOOKING).json()["bookingid"]
-
-    resp = api.delete(f"/booking/{bid}", headers={"Cookie": f"token={token}"})
-
-    assert resp.status == 201
-    assert api.get(f"/booking/{bid}").status == 404
+    assert admin.update(booking_id, updated).ok
+    assert admin.fetch(booking_id) == updated
 
 
-def test_auth_rejects_bad_credentials(api):
-    resp = api.post("/auth", data={"username": "admin", "password": "nope"})
+def test_delete_requires_token(anon, booking_id):
+    assert anon.delete(booking_id).status == 403
+    assert anon.get(booking_id).status == 200
+
+
+def test_delete_booking(admin):
+    bid = admin.create(BOOKING)
+
+    assert admin.delete(bid).status == 201  # the API documents 201 for delete
+    assert admin.get(bid).status == 404
+
+
+def test_auth_rejects_bad_credentials(anon):
+    resp = anon.authenticate("admin", "wrong")
 
     assert resp.json() == {"reason": "Bad credentials"}
