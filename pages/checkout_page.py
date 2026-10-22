@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from decimal import Decimal
 
 from playwright.sync_api import Page
 
@@ -8,19 +9,10 @@ from pages.money import parse_money
 
 @dataclass(frozen=True)
 class OrderSummary:
-    item_prices: list[float]
-    subtotal: float
-    tax: float
-    total: float
-
-
-class CartPage(BasePage):
-    path = "/cart.html"
-
-    def __init__(self, page: Page) -> None:
-        super().__init__(page)
-        self.items = page.get_by_test_id("inventory-item")
-        self.checkout = page.get_by_test_id("checkout")
+    item_prices: list[Decimal]
+    subtotal: Decimal
+    tax: Decimal
+    total: Decimal
 
 
 class CheckoutPage(BasePage):
@@ -50,9 +42,11 @@ class CheckoutPage(BasePage):
         self.continue_btn.click()
 
     def summary(self) -> OrderSummary:
+        # inner_text() waits for the subtotal, so the item list is rendered before it is read
+        subtotal = parse_money(self.subtotal.inner_text())
         return OrderSummary(
             item_prices=[parse_money(p) for p in self.item_prices.all_inner_texts()],
-            subtotal=parse_money(self.subtotal.inner_text()),
+            subtotal=subtotal,
             tax=parse_money(self.tax.inner_text()),
             total=parse_money(self.total.inner_text()),
         )

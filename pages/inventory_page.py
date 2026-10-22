@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from playwright.sync_api import Locator, Page
 
 from pages.base_page import BasePage
@@ -33,17 +35,28 @@ class InventoryPage(BasePage):
     def sort_by(self, value: str) -> None:
         self.sort.select_option(value)
 
-    def price_values(self) -> list[float]:
+    def price_values(self) -> list[Decimal]:
         return [parse_money(p) for p in self.prices.all_inner_texts()]
 
     def name_values(self) -> list[str]:
         return self.names.all_inner_texts()
 
-    def catalog(self) -> dict[str, float]:
+    def catalog(self) -> dict[str, Decimal]:
         return dict(zip(self.name_values(), self.price_values(), strict=True))
 
     def image_sources(self) -> list[str]:
         return [img.get_attribute("src") or "" for img in self.images.all()]
+
+    def broken_images(self) -> list[str]:
+        """src of images that failed to load. Waits until every image has finished loading first:
+        the catalogue renders after the page load event, so images are still in flight at that point."""
+        self.page.wait_for_function(
+            "() => [...document.querySelectorAll('img.inventory_item_img')].every(i => i.complete)"
+        )
+        result: list[str] = self.images.evaluate_all(
+            "imgs => imgs.filter(i => !i.complete || i.naturalWidth === 0).map(i => i.src)"
+        )
+        return result
 
     def open_product(self, name: str) -> None:
         self.names.filter(has_text=name).click()

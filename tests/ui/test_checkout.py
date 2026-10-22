@@ -1,17 +1,21 @@
+from decimal import ROUND_HALF_UP, Decimal
+
 import pytest
 from playwright.sync_api import expect
 
-from pages.checkout_page import CartPage, CheckoutPage
+from pages.cart_page import CartPage
+from pages.checkout_page import CheckoutPage
+from tests.ui.catalog import CATALOG, SLUGS, TAX_RATE
 
 pytestmark = pytest.mark.ui
 
-ITEMS = ["sauce-labs-backpack", "sauce-labs-fleece-jacket"]
+ITEMS = ["Sauce Labs Backpack", "Sauce Labs Fleece Jacket"]
 
 
 @pytest.fixture
 def cart(inventory) -> CartPage:
-    for slug in ITEMS:
-        inventory.add_to_cart(slug)
+    for name in ITEMS:
+        inventory.add_to_cart(SLUGS[name])
     inventory.cart_link.click()
     return CartPage(inventory.page)
 
@@ -24,8 +28,12 @@ def test_full_checkout(cart):
     checkout.submit_info("Test", "User", "33000")
     summary = checkout.summary()
 
-    assert summary.subtotal == pytest.approx(sum(summary.item_prices))
-    assert summary.total == pytest.approx(summary.subtotal + summary.tax)
+    expected_subtotal = sum(CATALOG[name] for name in ITEMS)
+    expected_tax = (expected_subtotal * TAX_RATE).quantize(Decimal("0.01"), ROUND_HALF_UP)
+    assert summary.item_prices == [CATALOG[name] for name in ITEMS]
+    assert summary.subtotal == expected_subtotal
+    assert summary.tax == expected_tax
+    assert summary.total == expected_subtotal + expected_tax
 
     checkout.finish.click()
     expect(checkout.complete_header).to_have_text("Thank you for your order!")
