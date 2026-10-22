@@ -3,13 +3,13 @@
 from dataclasses import replace
 
 import pytest
-from playwright.sync_api import Playwright
+from playwright.sync_api import APIRequestContext, Playwright
 
 from clients.booking import Booking, BookingClient, BookingDates
 from settings import BOOKING_API_URL
 
-# a shared public sandbox: network hiccups are retried, assertion failures are not
-TRANSIENT_ERRORS = ["Timeout", "ECONNRESET", r"-> 5\d\d"]
+# a shared public sandbox: 5xx and network errors are retried, wrong answers are not
+TRANSIENT_ERRORS = ["TransientHTTPError", "Timeout", "ECONNRESET"]
 pytestmark = [pytest.mark.api, pytest.mark.flaky(reruns=2, reruns_delay=2, only_rerun=TRANSIENT_ERRORS)]
 
 # public demo credentials from the API docs
@@ -25,32 +25,35 @@ BOOKING = Booking(
 )
 
 
-@pytest.fixture(scope="session")
-def request_context(playwright: Playwright):
-    ctx = playwright.request.new_context(
+def _context(playwright: Playwright) -> APIRequestContext:
+    return playwright.request.new_context(
         base_url=BOOKING_API_URL, extra_http_headers={"Accept": "application/json"}
     )
-    yield ctx
+
+
+@pytest.fixture(scope="session")
+def anon(playwright: Playwright):
+    # own request context: nothing the admin session sets can leak into anonymous calls
+    ctx = _context(playwright)
+    yield BookingClient(ctx)
     ctx.dispose()
 
 
-@pytest.fixture
-def anon(request_context) -> BookingClient:
-    return BookingClient(request_context)
-
-
-@pytest.fixture
-def admin(request_context) -> BookingClient:
-    client = BookingClient(request_context)
-    assert client.authenticate(*ADMIN).ok
-    return client
+@pytest.fixture(scope="session")
+def admin(playwright: Playwright):
+    ctx = _context(playwright)
+    client = BookingClient(ctx)
+    client.authenticate(*ADMIN)
+    assert client.is_authenticated, "admin login returned no token"
+    yield client
+    ctx.dispose()
 
 
 @pytest.fixture
 def booking_id(admin):
     bid = admin.create(BOOKING)
     yield bid
-    admin.delete(bid)
+    admin.delete(bid)  # cleanup; a test that already deleted it gets 405 here, which is fine
 
 
 def test_created_booking_reads_back_unchanged(anon, booking_id):
@@ -76,14 +79,13 @@ def test_delete_requires_token(anon, booking_id):
     assert anon.get(booking_id).status == 200
 
 
-def test_delete_booking(admin):
-    bid = admin.create(BOOKING)
-
-    assert admin.delete(bid).status == 201  # the API documents 201 for delete
-    assert admin.get(bid).status == 404
+def test_delete_booking(admin, booking_id):
+    assert admin.delete(booking_id).status == 201  # the API documents 201 for delete
+    assert admin.get(booking_id).status == 404
 
 
 def test_auth_rejects_bad_credentials(anon):
     resp = anon.authenticate("admin", "wrong")
 
     assert resp.json() == {"reason": "Bad credentials"}
+    assert not anon.is_authenticated
