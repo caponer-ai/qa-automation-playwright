@@ -1,15 +1,15 @@
 import pytest
 from playwright.sync_api import expect
 
-from conftest import PASSWORD, STANDARD_USER
 from pages.inventory_page import InventoryPage
 from pages.login_page import LoginPage
+from settings import SHOP_PASSWORD, User
 
 pytestmark = pytest.mark.ui
 
 
 def test_standard_user_logs_in(page):
-    LoginPage(page).open().login(STANDARD_USER, PASSWORD)
+    LoginPage(page).open().login(User.STANDARD, SHOP_PASSWORD)
 
     expect(page).to_have_url("/inventory.html")
     expect(InventoryPage(page).title).to_have_text("Products")
@@ -18,10 +18,10 @@ def test_standard_user_logs_in(page):
 @pytest.mark.parametrize(
     ("username", "password", "message"),
     [
-        ("locked_out_user", PASSWORD, "Sorry, this user has been locked out."),
-        (STANDARD_USER, "wrong_password", "Username and password do not match"),
-        ("", PASSWORD, "Username is required"),
-        (STANDARD_USER, "", "Password is required"),
+        (User.LOCKED_OUT, SHOP_PASSWORD, "Sorry, this user has been locked out."),
+        (User.STANDARD, "wrong_password", "Username and password do not match"),
+        ("", SHOP_PASSWORD, "Username is required"),
+        (User.STANDARD, "", "Password is required"),
     ],
     ids=["locked-out", "wrong-password", "empty-username", "empty-password"],
 )
