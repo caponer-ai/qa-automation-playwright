@@ -10,6 +10,16 @@ from settings import SHOP_PASSWORD, SHOP_URL, User
 LoginAs = Callable[[User], InventoryPage]
 
 
+SUITES = {"ui", "api", "scraper", "unit"}
+
+
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """CI selects tests by suite marker; a test without one would silently never run there."""
+    unmarked = [i.nodeid for i in items if not SUITES & {m.name for m in i.iter_markers()}]
+    if unmarked:
+        raise pytest.UsageError(f"tests without a suite marker {sorted(SUITES)}: {unmarked}")
+
+
 @pytest.fixture(scope="session", autouse=True)
 def _test_id_attribute(playwright: Playwright) -> None:
     # saucedemo marks elements with data-test, not data-testid

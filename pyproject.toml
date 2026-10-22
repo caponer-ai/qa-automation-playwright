@@ -15,6 +15,7 @@ markers = [
     "scraper: scraper tests on books.toscrape.com",
     "live: hits a live third-party site directly (no recorded responses)",
     "perf: timing checks, run without parallel workers",
+    "unit: no browser, no network",
 ]
 
 [tool.ruff]

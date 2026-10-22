@@ -5,6 +5,8 @@ import pytest
 from settings import ACTIVE_USERS, User
 from tests.ui.known_defects import KNOWN_DEFECTS, SYMPTOMS, Defects
 
+pytestmark = pytest.mark.unit
+
 
 def test_registry_uses_known_symptoms():
     assert {symptom for _, symptom in KNOWN_DEFECTS} <= SYMPTOMS

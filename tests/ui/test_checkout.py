@@ -26,10 +26,12 @@ def test_full_checkout(cart):
 
     checkout = CheckoutPage(cart.page)
     checkout.submit_info("Test", "User", "33000")
+    expect(checkout.item_names).to_have_text(ITEMS)  # waits for the full order before reading it
     summary = checkout.summary()
 
     expected_subtotal = sum(CATALOG[name] for name in ITEMS)
     expected_tax = (expected_subtotal * TAX_RATE).quantize(Decimal("0.01"), ROUND_HALF_UP)
+    assert summary.item_names == ITEMS
     assert summary.item_prices == [CATALOG[name] for name in ITEMS]
     assert summary.subtotal == expected_subtotal
     assert summary.tax == expected_tax

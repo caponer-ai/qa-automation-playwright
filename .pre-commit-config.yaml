@@ -9,5 +9,5 @@ repos:
     rev: v2.4.0
     hooks:
       - id: mypy
-        additional_dependencies: [playwright==1.64.0]
+        additional_dependencies: [playwright==1.64.0, pytest==8.4.2]
         pass_filenames: false # file list comes from [tool.mypy] in pyproject.toml

@@ -7,7 +7,7 @@ exploratory script and are now checked by `tests/ui/test_user_matrix.py`.
 
 Each defect is registered in `tests/ui/known_defects.py` against one narrow symptom check
 (`defects.symptom(...)`, see docs/decisions.md, decision 5). The test is xfail while the defect reproduces,
-red when it stops reproducing, and red for any other failure.
+red when it stops reproducing, and red for any failure outside the symptom block.
 
 Common precondition: open https://www.saucedemo.com, log in with the listed user and password `secret_sauce`.
 

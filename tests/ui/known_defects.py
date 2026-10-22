@@ -1,7 +1,8 @@
 """Registry of confirmed defects, keyed by (user, symptom). Details and repro steps: BUGS.md.
 
 Only a check wrapped in `defects.symptom(name)` can be matched against this registry.
-Preconditions outside that block stay red, so a new regression is never filed under an old bug.
+Preconditions outside that block stay red. A different failure inside the block would still be filed
+under the known bug, so each block checks a single field or element.
 """
 
 from collections.abc import Iterator
@@ -19,7 +20,9 @@ SYMPTOMS = {
     "sort_by_price",
     "remove_from_cart",
     "product_link",
-    "checkout_form",
+    "checkout_form[first_name]",
+    "checkout_form[last_name]",
+    "checkout_form[postal_code]",
     "reach_overview",
     "finish_order",
     *(f"add_to_cart[{slug}]" for slug in SLUGS.values()),
@@ -42,8 +45,9 @@ KNOWN_DEFECTS: dict[tuple[User, str], str] = {
     (User.PROBLEM, "remove_from_cart"): "BUG-07 Remove does nothing",
     (User.ERROR, "remove_from_cart"): "BUG-07 Remove does nothing",
     (User.PROBLEM, "product_link"): "BUG-08 product name opens a different product",
-    (User.PROBLEM, "checkout_form"): "BUG-09 typing Last Name overwrites First Name",
-    (User.ERROR, "checkout_form"): "BUG-10 Last Name field ignores input",
+    (User.PROBLEM, "checkout_form[first_name]"): "BUG-09 typing Last Name overwrites First Name",
+    (User.PROBLEM, "checkout_form[last_name]"): "BUG-09 Last Name stays empty",
+    (User.ERROR, "checkout_form[last_name]"): "BUG-10 Last Name field ignores input",
     (User.PROBLEM, "reach_overview"): "BUG-09 checkout blocked on step one",
     (User.ERROR, "finish_order"): "BUG-11 Finish does not complete the order",
     (User.PERFORMANCE_GLITCH, "login_speed"): "BUG-12 login takes about 5 s",

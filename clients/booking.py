@@ -48,12 +48,13 @@ class BookingClient:
     def authenticate(self, username: str, password: str) -> APIResponse:
         """Stores the token on success. The API answers 200 with {"reason": ...} on bad credentials."""
         resp = self._send("post", "/auth", data={"username": username, "password": password})
-        self._token = resp.json().get("token") if resp.ok else None
+        token = resp.json().get("token") if resp.ok else None
+        self._token = token if isinstance(token, str) and token else None
         return resp
 
     @property
     def is_authenticated(self) -> bool:
-        return self._token is not None
+        return bool(self._token)
 
     def create(self, booking: Booking) -> int:
         resp = self._require_ok(self._send("post", "/booking", data=booking.to_json()))

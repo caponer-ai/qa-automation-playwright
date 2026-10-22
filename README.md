@@ -31,8 +31,9 @@ def test_remove_from_cart(login_as, user, defects):
 ```
 
 `tests/ui/known_defects.py` maps `(user, symptom)` to a bug id. A registered symptom that fails is xfail;
-one that passes turns red ("no longer reproduces"); anything else that fails is red. These rules have their
-own browser-free tests in `tests/ui/test_known_defects.py`. Decision 5 explains why an earlier, simpler
+one that passes turns red ("no longer reproduces"); a failure outside the block is red. A different failure
+*inside* the block would still be filed under the known bug, so each block checks one field or element.
+These rules have their own browser-free tests in `tests/ui/test_known_defects.py`, run in the CI lint job. Decision 5 explains why an earlier, simpler
 approach (`xfail(raises=AssertionError)`) was replaced.
 
 ## Layout
@@ -56,7 +57,7 @@ playwright install chromium
 
 pytest -n 4 -m "not perf"        # everything except timing checks, 4 workers
 pytest -m perf -p no:xdist       # timing checks, one process
-pytest -m ui                     # one suite: ui | api | scraper | live | perf
+pytest -m ui                     # one suite: ui | api | scraper | unit | live | perf
 pytest -m ui --headed            # watch the browser
 pytest -rxX                      # list known defects in the summary
 
@@ -75,8 +76,8 @@ Point the suite at another stand: `SHOP_URL=https://staging.example.com pytest -
 
 ## Speed and stability
 
-- Parallel run with pytest-xdist: the 111 tests outside `perf` take about 70 s on 4 workers instead of about
-  236 s in one process (local Windows machine, 22.10.2026, 3 parallel and 2 sequential runs).
+- Parallel run with pytest-xdist: the 128 tests outside `perf` take about 77 s on 4 workers instead of about
+  267 s in one process (local Windows machine, 22.10.2026, 3 parallel runs and 1 sequential run).
 - Login through the form at most once per account per worker, then the session cookie is reused (decision 2).
 - Web-first `expect()` assertions wait for state; no `sleep` anywhere.
 - Scraper tests replay a HAR with every other request blocked: no network, same input each run (decision 7).
@@ -84,13 +85,15 @@ Point the suite at another stand: `SHOP_URL=https://staging.example.com pytest -
 
 ## When a test fails
 
-A screenshot and a Playwright trace are saved to `test-results/`; CI uploads them as an artifact.
+For tests on pytest-playwright's `page` fixture a screenshot and a trace are saved to `test-results/`;
+the suite jobs in CI upload them as an artifact. Contexts created by hand (cached login, HAR replay) are not traced.
 Open a trace with `playwright show-trace test-results/<test>/trace.zip` to step through every action,
 network call and DOM snapshot.
 
 ## CI
 
-GitHub Actions: `ruff`, `ruff format` and strict `mypy` on library code and the defect registry; then the
+GitHub Actions: `ruff`, `ruff format`, strict `mypy` on library code and the defect registry, and the browser-free
+`unit` tests; every test must carry a suite marker or collection fails. Then the
 `ui`, `api` and offline `scraper` suites in parallel; a Docker job that builds the image and runs the offline
 suite inside it; and a non-blocking `signals` job for timing checks and the live scraper smoke test
 (decisions 6 and 9). A weekly scheduled run catches changes on the third-party sites.

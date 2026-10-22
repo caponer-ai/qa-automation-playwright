@@ -98,19 +98,21 @@ def test_product_link_opens_same_product(login_as, user, defects):
 
     # wait for navigation first: the catalogue has six elements with the same test id
     expect(inventory.page).to_have_url(re.compile(r"inventory-item\.html\?id=\d+"))
+    expect(ProductPage(inventory.page).name).to_be_visible()  # a missing title is not "wrong product"
     with defects.symptom("product_link"):
         expect(ProductPage(inventory.page).name).to_have_text(BACKPACK)
 
 
-def test_checkout_form_keeps_input(login_as, user, defects):
+# one test per field: a fixed field and a newly broken one must not share one xfail
+@pytest.mark.parametrize("field", ["first_name", "last_name", "postal_code"])
+def test_checkout_form_keeps_input(login_as, user, defects, field):
     checkout = CheckoutPage(login_as(user).page).open()
 
     checkout.fill_info("Test", "User", "33000")
 
-    with defects.symptom("checkout_form"):
-        expect(checkout.first_name).to_have_value("Test")
-        expect(checkout.last_name).to_have_value("User")
-        expect(checkout.postal_code).to_have_value("33000")
+    expected = {"first_name": "Test", "last_name": "User", "postal_code": "33000"}[field]
+    with defects.symptom(f"checkout_form[{field}]"):
+        expect(getattr(checkout, field)).to_have_value(expected)
 
 
 def test_complete_order(login_as, user, defects):

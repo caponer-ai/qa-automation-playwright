@@ -4,7 +4,7 @@ from dataclasses import asdict
 
 import pytest
 
-from scraper.books import START_URL, Book, ParseError, parse_page, save, scrape
+from scraper.books import START_URL, Book, ParseError, ScrapeError, parse_page, save, scrape
 from settings import BOOKS_URL
 
 pytestmark = pytest.mark.scraper
@@ -85,6 +85,28 @@ def test_price_without_currency_symbol(page):
     page.set_content(card(price="12.50"))
 
     assert parse_page(page)[0].price == 12.5
+
+
+@pytest.mark.parametrize("price", ["£-12.50", "£1,299.99", "error 500", "£12", ""])
+def test_malformed_price_is_a_parse_error(page, price):
+    page.set_content(card(price=price))
+
+    with pytest.raises(ParseError):
+        parse_page(page)
+
+
+def test_page_without_cards_is_a_parse_error(page):
+    page.set_content("<html><body><p>Service unavailable</p></body></html>")
+
+    with pytest.raises(ParseError, match="no product cards"):
+        parse_page(page)
+
+
+def test_http_error_stops_the_scrape(page):
+    page.route("**/broken.html", lambda route: route.fulfill(status=500, body="oops"))
+
+    with pytest.raises(ScrapeError, match="500"):
+        scrape(page, max_pages=1, start_url=f"{BOOKS_URL}/broken.html")
 
 
 # --- export --------------------------------------------------------------

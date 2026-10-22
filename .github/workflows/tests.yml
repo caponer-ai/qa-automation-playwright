@@ -25,6 +25,7 @@ jobs:
       - run: ruff check .
       - run: ruff format --check .
       - run: mypy
+      - run: pytest -m unit -p no:xdist # browser-free tests of the test infrastructure
 
   tests:
     needs: lint

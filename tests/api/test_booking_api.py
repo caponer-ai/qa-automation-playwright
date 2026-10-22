@@ -53,7 +53,8 @@ def admin(playwright: Playwright):
 def booking_id(admin):
     bid = admin.create(BOOKING)
     yield bid
-    admin.delete(bid)  # cleanup; a test that already deleted it gets 405 here, which is fine
+    if admin.delete(bid).status != 201:  # the test may have deleted it already
+        assert admin.get(bid).status == 404, f"booking {bid} was left behind"
 
 
 def test_created_booking_reads_back_unchanged(anon, booking_id):

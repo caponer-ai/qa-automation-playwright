@@ -49,9 +49,9 @@ An earlier version marked whole tests `xfail(raises=AssertionError)`. That was w
 `AssertionError` when its wait times out, so a new regression in a precondition was filed under an old bug.
 The rules above are tested without a browser in `tests/ui/test_known_defects.py`.
 
-**Cost:** one more concept for a reader, and a symptom block must stay narrow. A symptom that spans several
-steps could still hide a second defect inside it; that is why add-to-cart is checked per product and
-remove is a separate test.
+**Cost:** one more concept for a reader, and the classification is only as precise as the block: a different
+failure *inside* a symptom block is still filed under the known bug. Blocks are therefore kept to one field or
+element: add-to-cart is checked per product, remove separately, and checkout fields one by one.
 
 ## 6. Reruns only for transient API errors; timing is a signal, not a gate
 

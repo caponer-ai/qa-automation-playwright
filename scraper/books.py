@@ -15,13 +15,18 @@ from playwright.sync_api import Locator, Page, sync_playwright
 from settings import BOOKS_URL
 
 START_URL = f"{BOOKS_URL}/catalogue/page-1.html"
-_PRICE = re.compile(r"\d+(?:\.\d+)?")
+# the site shows "£51.77"; anything else (negative, thousands separator, text) is a parse error
+_PRICE = re.compile(r"£?(\d+\.\d{2})")
 RATINGS = {"One": 1, "Two": 2, "Three": 3, "Four": 4, "Five": 5}
 # images and fonts are not needed for parsing, skipping them speeds pages up
 SKIPPED_ASSETS = "**/*.{png,jpg,jpeg,gif,woff,woff2}"
 
 
 class ParseError(ValueError):
+    pass
+
+
+class ScrapeError(RuntimeError):
     pass
 
 
@@ -48,12 +53,12 @@ def parse_card(card: Locator, page_url: str) -> Book:
     if len(rating_words) != 1:
         raise ParseError(f"no single rating class in {card.locator('p.star-rating')}")
     price_text = card.locator("p.price_color").inner_text()
-    price = _PRICE.search(price_text)
+    price = _PRICE.fullmatch(price_text.strip())
     if price is None:
-        raise ParseError(f"no price in {price_text!r}")
+        raise ParseError(f"unexpected price format {price_text!r}")
     return Book(
         title=_attr(link, "title"),
-        price=float(price.group()),
+        price=float(price.group(1)),
         rating=RATINGS[rating_words.pop()],
         in_stock="In stock" in card.locator("p.availability").inner_text(),
         url=urljoin(page_url, _attr(link, "href")),
@@ -61,20 +66,30 @@ def parse_card(card: Locator, page_url: str) -> Book:
 
 
 def parse_page(page: Page) -> list[Book]:
-    return [parse_card(card, page.url) for card in page.locator("article.product_pod").all()]
+    cards = page.locator("article.product_pod").all()
+    if not cards:
+        # an error page or changed markup must not look like a successful empty scrape
+        raise ParseError(f"no product cards on {page.url}")
+    return [parse_card(card, page.url) for card in cards]
+
+
+def _open(page: Page, url: str) -> None:
+    response = page.goto(url)
+    if response is None or not response.ok:
+        raise ScrapeError(f"{url} -> {response.status if response else 'no response'}")
 
 
 def scrape(page: Page, max_pages: int, start_url: str = START_URL) -> list[Book]:
     if max_pages < 1:
         raise ValueError("max_pages must be at least 1")
     books: list[Book] = []
-    page.goto(start_url)
+    _open(page, start_url)
     for page_no in range(1, max_pages + 1):
         books.extend(parse_page(page))
         next_link = page.locator("li.next a")
         if page_no == max_pages or not next_link.count():
             break
-        page.goto(urljoin(page.url, _attr(next_link, "href")))
+        _open(page, urljoin(page.url, _attr(next_link, "href")))
     return books
 
 

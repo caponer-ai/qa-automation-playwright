@@ -9,6 +9,7 @@ from pages.money import parse_money
 
 @dataclass(frozen=True)
 class OrderSummary:
+    item_names: list[str]
     item_prices: list[Decimal]
     subtotal: Decimal
     tax: Decimal
@@ -25,6 +26,7 @@ class CheckoutPage(BasePage):
         self.postal_code = page.get_by_test_id("postalCode")
         self.continue_btn = page.get_by_test_id("continue")
         self.error = page.get_by_test_id("error")
+        self.item_names = page.get_by_test_id("inventory-item-name")
         self.item_prices = page.get_by_test_id("inventory-item-price")
         self.subtotal = page.get_by_test_id("subtotal-label")
         self.tax = page.get_by_test_id("tax-label")
@@ -42,11 +44,11 @@ class CheckoutPage(BasePage):
         self.continue_btn.click()
 
     def summary(self) -> OrderSummary:
-        # inner_text() waits for the subtotal, so the item list is rendered before it is read
-        subtotal = parse_money(self.subtotal.inner_text())
+        """Snapshot of the overview page. Callers wait for the expected rows first (see test_checkout)."""
         return OrderSummary(
+            item_names=self.item_names.all_inner_texts(),
             item_prices=[parse_money(p) for p in self.item_prices.all_inner_texts()],
-            subtotal=subtotal,
+            subtotal=parse_money(self.subtotal.inner_text()),
             tax=parse_money(self.tax.inner_text()),
             total=parse_money(self.total.inner_text()),
         )
