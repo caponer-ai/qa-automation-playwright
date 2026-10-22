@@ -1,16 +1,23 @@
-import re
+from dataclasses import dataclass
+
+from playwright.sync_api import Page
 
 from pages.base_page import BasePage
+from pages.money import parse_money
 
 
-def _money(text: str) -> float:
-    return float(re.search(r"\$([\d.]+)", text).group(1))
+@dataclass(frozen=True)
+class OrderSummary:
+    item_prices: list[float]
+    subtotal: float
+    tax: float
+    total: float
 
 
 class CartPage(BasePage):
     path = "/cart.html"
 
-    def __init__(self, page):
+    def __init__(self, page: Page) -> None:
         super().__init__(page)
         self.items = page.get_by_test_id("inventory-item")
         self.checkout = page.get_by_test_id("checkout")
@@ -19,7 +26,7 @@ class CartPage(BasePage):
 class CheckoutPage(BasePage):
     path = "/checkout-step-one.html"
 
-    def __init__(self, page):
+    def __init__(self, page: Page) -> None:
         super().__init__(page)
         self.first_name = page.get_by_test_id("firstName")
         self.last_name = page.get_by_test_id("lastName")
@@ -33,16 +40,19 @@ class CheckoutPage(BasePage):
         self.finish = page.get_by_test_id("finish")
         self.complete_header = page.get_by_test_id("complete-header")
 
-    def fill_info(self, first: str, last: str, postal: str):
+    def fill_info(self, first: str, last: str, postal: str) -> None:
         self.first_name.fill(first)
         self.last_name.fill(last)
         self.postal_code.fill(postal)
+
+    def submit_info(self, first: str, last: str, postal: str) -> None:
+        self.fill_info(first, last, postal)
         self.continue_btn.click()
 
-    def summary(self) -> dict:
-        return {
-            "items": [_money(p) for p in self.item_prices.all_inner_texts()],
-            "subtotal": _money(self.subtotal.inner_text()),
-            "tax": _money(self.tax.inner_text()),
-            "total": _money(self.total.inner_text()),
-        }
+    def summary(self) -> OrderSummary:
+        return OrderSummary(
+            item_prices=[parse_money(p) for p in self.item_prices.all_inner_texts()],
+            subtotal=parse_money(self.subtotal.inner_text()),
+            tax=parse_money(self.tax.inner_text()),
+            total=parse_money(self.total.inner_text()),
+        )

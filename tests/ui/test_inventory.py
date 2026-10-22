@@ -9,7 +9,7 @@ def test_catalog_shows_six_products(inventory):
 
 
 @pytest.mark.parametrize(
-    "option, key, reverse",
+    ("option", "key", "reverse"),
     [
         ("lohi", "price", False),
         ("hilo", "price", True),

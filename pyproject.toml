@@ -1,0 +1,29 @@
+[project]
+name = "qa-automation-playwright"
+version = "0.2.0"
+description = "UI, API and scraper automation with Playwright + pytest"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "--browser chromium --tracing retain-on-failure --screenshot only-on-failure --output test-results"
+xfail_strict = true
+markers = [
+    "ui: UI tests on saucedemo.com",
+    "api: API tests on restful-booker",
+    "scraper: scraper tests on books.toscrape.com",
+    "live: hits a live third-party site directly (no recorded responses)",
+]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "PT", "RUF"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+exclude = ["^tests/"]

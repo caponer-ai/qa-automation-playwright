@@ -58,9 +58,7 @@ def test_update_booking_requires_token(api, booking_id):
 
 def test_update_booking(api, token, booking_id):
     updated = {**BOOKING, "totalprice": 999, "additionalneeds": "Late checkout"}
-    resp = api.put(
-        f"/booking/{booking_id}", data=updated, headers={"Cookie": f"token={token}"}
-    )
+    resp = api.put(f"/booking/{booking_id}", data=updated, headers={"Cookie": f"token={token}"})
 
     assert resp.ok
     assert api.get(f"/booking/{booking_id}").json() == updated

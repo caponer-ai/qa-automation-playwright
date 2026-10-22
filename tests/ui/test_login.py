@@ -16,7 +16,7 @@ def test_standard_user_logs_in(page):
 
 
 @pytest.mark.parametrize(
-    "username, password, message",
+    ("username", "password", "message"),
     [
         ("locked_out_user", PASSWORD, "Sorry, this user has been locked out."),
         (STANDARD_USER, "wrong_password", "Username and password do not match"),

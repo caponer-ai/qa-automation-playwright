@@ -1,6 +1,6 @@
 import pytest
 
-from scraper.books import scrape, save
+from scraper.books import save, scrape
 
 pytestmark = pytest.mark.scraper
 
@@ -32,9 +32,7 @@ def test_titles_are_unique(books):
 
 def test_stops_on_last_page(browser):
     page = browser.new_page()
-    result = scrape(
-        page, max_pages=5, start_url="https://books.toscrape.com/catalogue/page-50.html"
-    )
+    result = scrape(page, max_pages=5, start_url="https://books.toscrape.com/catalogue/page-50.html")
     page.close()
 
     assert len(result) == 20
