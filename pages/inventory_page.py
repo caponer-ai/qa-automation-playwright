@@ -72,3 +72,5 @@ class ProductPage(BasePage):
     def __init__(self, page: Page) -> None:
         super().__init__(page)
         self.name = page.get_by_test_id("inventory-item-name")
+        # only exists on this page; the URL changes before the catalogue is re-rendered
+        self.back_button = page.get_by_test_id("back-to-products")

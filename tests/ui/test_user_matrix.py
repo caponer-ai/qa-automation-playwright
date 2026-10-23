@@ -96,11 +96,13 @@ def test_product_link_opens_same_product(login_as, user, defects):
     inventory = login_as(user)
     inventory.open_product(BACKPACK)
 
-    # wait for navigation first: the catalogue has six elements with the same test id
+    product = ProductPage(inventory.page)
     expect(inventory.page).to_have_url(re.compile(r"inventory-item\.html\?id=\d+"))
-    expect(ProductPage(inventory.page).name).to_be_visible()  # a missing title is not "wrong product"
+    # the URL changes before the DOM does: until this button shows, the six catalogue titles share the test id
+    expect(product.back_button).to_be_visible()
+    expect(product.name).to_be_visible()  # a missing title is not "wrong product"
     with defects.symptom("product_link"):
-        expect(ProductPage(inventory.page).name).to_have_text(BACKPACK)
+        expect(product.name).to_have_text(BACKPACK)
 
 
 # one test per field: a fixed field and a newly broken one must not share one xfail
